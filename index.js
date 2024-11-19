@@ -22,17 +22,20 @@ app.get('/', function(req, res) {
 
 app.get('/api/shorturl/:short_url', (req, res)=>{
   let urlDoc = urlCollection.find((u)=>u.short_url == parseInt(req.params.short_url));
-  res.redirect(urlDoc.original_url);
+  if (urlDoc === undefined)
+    res.json({"error":"No short URL found for the given input"});
+  else
+    res.redirect(urlDoc.original_url);
 });
 
 // Add record to urlCollection
-app.post("/api/shorturl/", verifyURL, verifyDNS, (req, res)=>{
+app.post("/api/shorturl", verifyURL, verifyDNS, (req, res)=>{
   let original_url = req.body.url;
   let short_url;
 
   // Set the short_url to the maximum 
   if (urlCollection.length == 0) {
-    short_url = 0; 
+    short_url = 1;
   } else {
     urlCollection.sort((a,b)=>a.short_url - b.short_url);
     short_url = urlCollection[urlCollection.length-1].short_url+1;
@@ -53,7 +56,7 @@ function verifyURL(req, res, next) {
   let workingURL = req.body.url;
 
   try {
-    let _ = new url.URL(workingURL);
+    new url.URL(workingURL);
   } catch (err) {
     console.log(err);
     if (err instanceof TypeError)
@@ -65,14 +68,7 @@ function verifyURL(req, res, next) {
 // Verify if the URL is a valid DNS.
 function verifyDNS(req, res, next) {
   console.log('Verifying DNS');
-  let workingURL = req.body.url;
-
-  // Cut out the "http://" or "https://" to verify DNS
-  if (workingURL.includes("http://", 0))
-    workingURL = workingURL.slice(7);
-  if (workingURL.includes("https://", 0))
-    workingURL = workingURL.slice(8);
-
+  workingURL = new url.URL(req.body.url).hostname;
   
   // Make sure the domain isn't an IP address 
   if (net.isIP(workingURL)) {
@@ -82,7 +78,7 @@ function verifyDNS(req, res, next) {
 
   // Note: dns.lookup() allows strings that look like ipv4 addresses
   // I'm setting {family: 6} so that we make sure it doesn't allow ip addresses
-  dns.lookup(workingURL, {family: 6},(err, address, family)=>{
+  dns.lookup(workingURL, (err, address, family)=>{
     if (err) {
       console.error(err);
       return res.json({ error:'invalid url' });
